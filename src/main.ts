@@ -30,14 +30,45 @@ clearBtn.textContent = "Clear";
 controls.appendChild(clearBtn);
 document.body.appendChild(controls);
 
-// Get the 2D drawing context
-const ctx = canvas.getContext("2d");
-if (!ctx) {
+// Get the 2D drawing context and narrow to a non-nullable variable
+const rawCtx = canvas.getContext("2d");
+if (!rawCtx) {
   throw new Error("2D context not available");
 }
+const ctx: CanvasRenderingContext2D = rawCtx;
 
-// Drawing state
+// Drawing state and data model
+type Point = { x: number; y: number };
+const strokes: Point[][] = [];
+let currentStroke: Point[] | null = null;
 let drawing = false;
+
+// Redraw all strokes
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (const stroke of strokes) {
+    if (stroke.length === 0) continue;
+    ctx.beginPath();
+    const p0 = stroke[0];
+    ctx.moveTo(p0.x + 0.5, p0.y + 0.5);
+    for (let i = 1; i < stroke.length; i++) {
+      const p = stroke[i];
+      ctx.lineTo(p.x + 0.5, p.y + 0.5);
+    }
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
+// Observer: redraw when drawing changes
+canvas.addEventListener("drawing-changed", () => {
+  redraw();
+});
 
 function getCanvasCoords(ev: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
@@ -50,33 +81,37 @@ function getCanvasCoords(ev: MouseEvent) {
 canvas.addEventListener("mousedown", (ev) => {
   drawing = true;
   const { x, y } = getCanvasCoords(ev);
-  ctx.beginPath();
-  ctx.moveTo(x + 0.5, y + 0.5);
+  // start a new stroke and add the initial point
+  currentStroke = [];
+  strokes.push(currentStroke);
+  currentStroke.push({ x, y });
+  // notify observers that the drawing changed
+  canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
 
 globalThis.addEventListener("mousemove", (ev) => {
-  if (!drawing) return;
+  if (!drawing || !currentStroke) return;
   const { x, y } = getCanvasCoords(ev as MouseEvent);
-  ctx.lineTo(x + 0.5, y + 0.5);
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.stroke();
+  currentStroke.push({ x, y });
+  // notify observers that the drawing changed
+  canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
 
 globalThis.addEventListener("mouseup", () => {
   if (!drawing) return;
   drawing = false;
-  ctx.closePath();
+  currentStroke = null;
 });
 
 canvas.addEventListener("mouseleave", () => {
   if (!drawing) return;
   drawing = false;
-  ctx.closePath();
+  currentStroke = null;
 });
 
 clearBtn.addEventListener("click", () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // clear the data model and notify observer to redraw (which will clear)
+  strokes.length = 0;
+  currentStroke = null;
+  canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
