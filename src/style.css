@@ -3,3 +3,14 @@
   vertical-align: top;
   border: 1px solid salmon;
 }
+
+/* Canvas styles for visibility and polish */
+#sketch-canvas {
+  width: 256px; /* CSS size to match the drawing buffer */
+  height: 256px;
+  border: 1px solid #000; /* thin black border */
+  border-radius: 8px; /* friendly rounded corners */
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12); /* subtle drop shadow */
+  display: block;
+  margin: 12px 0;
+}
