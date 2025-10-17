@@ -21,13 +21,27 @@ info.innerHTML =
   `Example image asset: <img src="${exampleIconUrl}" class="icon" />`;
 document.body.appendChild(info);
 
-// Create a control bar with a Clear button
+// Create a control bar with Undo / Redo / Clear buttons
 const controls = document.createElement("div");
 controls.className = "controls";
+
+const undoBtn = document.createElement("button");
+undoBtn.type = "button";
+undoBtn.textContent = "Undo";
+undoBtn.disabled = true;
+controls.appendChild(undoBtn);
+
+const redoBtn = document.createElement("button");
+redoBtn.type = "button";
+redoBtn.textContent = "Redo";
+redoBtn.disabled = true;
+controls.appendChild(redoBtn);
+
 const clearBtn = document.createElement("button");
 clearBtn.type = "button";
 clearBtn.textContent = "Clear";
 controls.appendChild(clearBtn);
+
 document.body.appendChild(controls);
 
 // Get the 2D drawing context and narrow to a non-nullable variable
@@ -40,6 +54,7 @@ const ctx: CanvasRenderingContext2D = rawCtx;
 // Drawing state and data model
 type Point = { x: number; y: number };
 const strokes: Point[][] = [];
+const redoStack: Point[][] = [];
 let currentStroke: Point[] | null = null;
 let drawing = false;
 
@@ -82,6 +97,10 @@ canvas.addEventListener("mousedown", (ev) => {
   drawing = true;
   const { x, y } = getCanvasCoords(ev);
   // start a new stroke and add the initial point
+  // starting a new user action invalidates the redo stack
+  redoStack.length = 0;
+  redoBtn.disabled = true;
+
   currentStroke = [];
   strokes.push(currentStroke);
   currentStroke.push({ x, y });
@@ -101,6 +120,8 @@ globalThis.addEventListener("mouseup", () => {
   if (!drawing) return;
   drawing = false;
   currentStroke = null;
+  // enable undo if there are strokes
+  undoBtn.disabled = strokes.length === 0;
 });
 
 canvas.addEventListener("mouseleave", () => {
@@ -112,6 +133,31 @@ canvas.addEventListener("mouseleave", () => {
 clearBtn.addEventListener("click", () => {
   // clear the data model and notify observer to redraw (which will clear)
   strokes.length = 0;
+  redoStack.length = 0;
   currentStroke = null;
+  undoBtn.disabled = true;
+  redoBtn.disabled = true;
+  canvas.dispatchEvent(new CustomEvent("drawing-changed"));
+});
+
+// Undo behavior: move last stroke to redo stack
+undoBtn.addEventListener("click", () => {
+  if (strokes.length === 0) return;
+  const last = strokes.pop()!;
+  redoStack.push(last);
+  // update button states
+  undoBtn.disabled = strokes.length === 0;
+  redoBtn.disabled = false;
+  canvas.dispatchEvent(new CustomEvent("drawing-changed"));
+});
+
+// Redo behavior: move last redo back to strokes
+redoBtn.addEventListener("click", () => {
+  if (redoStack.length === 0) return;
+  const last = redoStack.pop()!;
+  strokes.push(last);
+  // update button states
+  redoBtn.disabled = redoStack.length === 0;
+  undoBtn.disabled = false;
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
