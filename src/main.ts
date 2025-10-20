@@ -123,6 +123,10 @@ const strokes: MarkerLine[] = [];
 const redoStack: MarkerLine[] = [];
 let currentStroke: MarkerLine | null = null;
 let drawing = false;
+// Tool preview: an object with a draw(ctx) method shown when the mouse is over
+// the canvas and not currently drawing.
+type Previewable = { draw(ctx: CanvasRenderingContext2D): void };
+let toolPreview: Previewable | null = null;
 
 // Redraw all strokes
 function redraw() {
@@ -134,6 +138,16 @@ function redraw() {
 
   for (const stroke of strokes) {
     stroke.display(ctx);
+  }
+
+  // draw tool preview on top when present and not drawing
+  if (!drawing && toolPreview) {
+    // draw preview with a semi-transparent style
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    ctx.strokeStyle = "#000";
+    toolPreview.draw(ctx);
+    ctx.restore();
   }
 }
 
@@ -165,12 +179,40 @@ canvas.addEventListener("mousedown", (ev) => {
 });
 
 globalThis.addEventListener("mousemove", (ev) => {
-  if (!drawing || !currentStroke) return;
   const { x, y } = getCanvasCoords(ev as MouseEvent);
-  currentStroke.drag(x, y);
-  // notify observers that the drawing changed
+  if (drawing && currentStroke) {
+    currentStroke.drag(x, y);
+    // notify observers that the drawing changed
+    canvas.dispatchEvent(new CustomEvent("drawing-changed"));
+    return;
+  }
+
+  // when not drawing, update the tool preview and dispatch an event
+  toolPreview = {
+    draw(ctx) {
+      // show a circle whose radius matches half the selected thickness
+      ctx.beginPath();
+      ctx.arc(
+        x,
+        y,
+        Math.max(1, Math.round(thisRadius(selectedThickness))),
+        0,
+        Math.PI * 2,
+      );
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.closePath();
+    },
+  };
+  // custom event for tool moved
+  canvas.dispatchEvent(new CustomEvent("tool-moved", { detail: { x, y } }));
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
+
+function thisRadius(thickness: number) {
+  // visual radius for the preview circle
+  return thickness / 2;
+}
 
 globalThis.addEventListener("mouseup", () => {
   if (!drawing) return;
@@ -184,6 +226,12 @@ canvas.addEventListener("mouseleave", () => {
   if (!drawing) return;
   drawing = false;
   currentStroke = null;
+});
+
+// clear preview when the mouse leaves the canvas
+canvas.addEventListener("mouseleave", () => {
+  toolPreview = null;
+  canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
 
 clearBtn.addEventListener("click", () => {
