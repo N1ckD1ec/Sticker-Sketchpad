@@ -69,13 +69,52 @@ thinBtn.addEventListener("click", () => {
   selectedThickness = 2;
   thinBtn.classList.add("selected");
   thickBtn.classList.remove("selected");
+  // switching to marker clears any sticker selection
+  selectedSticker = null;
+  // remove selected style from sticker buttons
+  document.querySelectorAll(".sticker-btn.selected").forEach((el) =>
+    el.classList.remove("selected")
+  );
 });
 
 thickBtn.addEventListener("click", () => {
   selectedThickness = 6;
   thickBtn.classList.add("selected");
   thinBtn.classList.remove("selected");
+  // switching to marker clears sticker selection
+  selectedSticker = null;
+  document.querySelectorAll(".sticker-btn.selected").forEach((el) =>
+    el.classList.remove("selected")
+  );
 });
+
+// Sticker tool buttons
+const stickersBar = document.createElement("div");
+stickersBar.className = "stickers";
+const stickerEmojis = ["😀", "🐱", "🌵"];
+for (const emoji of stickerEmojis) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = emoji;
+  b.className = "sticker-btn";
+  b.addEventListener("click", () => {
+    // clear marker selection visuals
+    thinBtn.classList.remove("selected");
+    thickBtn.classList.remove("selected");
+    // toggle sticker selection
+    const already = selectedSticker === emoji;
+    selectedSticker = already ? null : emoji;
+    // visual toggle
+    document.querySelectorAll(".sticker-btn").forEach((el) =>
+      el.classList.remove("selected")
+    );
+    if (!already) b.classList.add("selected");
+    // notify that the tool moved/changed so a preview can appear
+    canvas.dispatchEvent(new CustomEvent("tool-moved"));
+  });
+  stickersBar.appendChild(b);
+}
+document.body.appendChild(stickersBar);
 
 // Get the 2D drawing context and narrow to a non-nullable variable
 const rawCtx = canvas.getContext("2d");
@@ -118,11 +157,42 @@ class MarkerLine {
     ctx.closePath();
   }
 }
+// strokes can be either MarkerLine or Sticker commands
+class Sticker {
+  // center position for the sticker
+  x: number;
+  y: number;
+  emoji: string;
+  size: number;
+  constructor(x: number, y: number, emoji = "😀", size = 32) {
+    this.x = Math.round(x);
+    this.y = Math.round(y);
+    this.emoji = emoji;
+    this.size = size;
+  }
+  // reposition the sticker (dragging moves the placed sticker)
+  drag(x: number, y: number) {
+    this.x = Math.round(x);
+    this.y = Math.round(y);
+  }
+  // draw the sticker (emoji) centered at x,y
+  display(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `${this.size}px serif`;
+    ctx.fillText(this.emoji, this.x + 0.5, this.y + 0.5);
+    ctx.restore();
+  }
+}
 
-const strokes: MarkerLine[] = [];
-const redoStack: MarkerLine[] = [];
-let currentStroke: MarkerLine | null = null;
+const strokes: Array<MarkerLine | Sticker> = [];
+const redoStack: Array<MarkerLine | Sticker> = [];
+let currentStroke: MarkerLine | Sticker | null = null;
 let drawing = false;
+
+// selected sticker (emoji) or null when not selecting stickers
+let selectedSticker: string | null = null;
 // Tool preview: an object with a draw(ctx) method shown when the mouse is over
 // the canvas and not currently drawing.
 type Previewable = { draw(ctx: CanvasRenderingContext2D): void };
@@ -172,8 +242,15 @@ canvas.addEventListener("mousedown", (ev) => {
   redoStack.length = 0;
   redoBtn.disabled = true;
 
-  currentStroke = new MarkerLine(x, y, selectedThickness);
-  strokes.push(currentStroke);
+  if (selectedSticker) {
+    // place a sticker command
+    currentStroke = new Sticker(x, y, selectedSticker, 32);
+    strokes.push(currentStroke);
+    // after placing a sticker we stay in sticker mode but allow dragging to reposition
+  } else {
+    currentStroke = new MarkerLine(x, y, selectedThickness);
+    strokes.push(currentStroke);
+  }
   // notify observers that the drawing changed
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
@@ -188,22 +265,37 @@ globalThis.addEventListener("mousemove", (ev) => {
   }
 
   // when not drawing, update the tool preview and dispatch an event
-  toolPreview = {
-    draw(ctx) {
-      // show a circle whose radius matches half the selected thickness
-      ctx.beginPath();
-      ctx.arc(
-        x,
-        y,
-        Math.max(1, Math.round(thisRadius(selectedThickness))),
-        0,
-        Math.PI * 2,
-      );
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.closePath();
-    },
-  };
+  if (selectedSticker) {
+    const emoji = selectedSticker;
+    toolPreview = {
+      draw(ctx) {
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `32px serif`;
+        ctx.fillText(emoji, x + 0.5, y + 0.5);
+        ctx.restore();
+      },
+    };
+  } else {
+    toolPreview = {
+      draw(ctx) {
+        // show a circle whose radius matches half the selected thickness
+        ctx.beginPath();
+        ctx.arc(
+          x,
+          y,
+          Math.max(1, Math.round(thisRadius(selectedThickness))),
+          0,
+          Math.PI * 2,
+        );
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.closePath();
+      },
+    };
+  }
+
   // custom event for tool moved
   canvas.dispatchEvent(new CustomEvent("tool-moved", { detail: { x, y } }));
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
