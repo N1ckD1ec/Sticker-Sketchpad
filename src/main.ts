@@ -53,9 +53,36 @@ const ctx: CanvasRenderingContext2D = rawCtx;
 
 // Drawing state and data model
 type Point = { x: number; y: number };
-const strokes: Point[][] = [];
-const redoStack: Point[][] = [];
-let currentStroke: Point[] | null = null;
+
+// Command/Display object for a marker stroke. Stores an ordered list of points
+// and knows how to draw itself on a CanvasRenderingContext2D.
+class MarkerLine {
+  points: Point[] = [];
+  constructor(x: number, y: number) {
+    this.points.push({ x: Math.round(x), y: Math.round(y) });
+  }
+  // extend the stroke with a new point
+  drag(x: number, y: number) {
+    this.points.push({ x: Math.round(x), y: Math.round(y) });
+  }
+  // render the stroke onto the provided context
+  display(ctx: CanvasRenderingContext2D) {
+    if (this.points.length === 0) return;
+    ctx.beginPath();
+    const p0 = this.points[0];
+    ctx.moveTo(p0.x + 0.5, p0.y + 0.5);
+    for (let i = 1; i < this.points.length; i++) {
+      const p = this.points[i];
+      ctx.lineTo(p.x + 0.5, p.y + 0.5);
+    }
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
+const strokes: MarkerLine[] = [];
+const redoStack: MarkerLine[] = [];
+let currentStroke: MarkerLine | null = null;
 let drawing = false;
 
 // Redraw all strokes
@@ -67,16 +94,7 @@ function redraw() {
   ctx.lineJoin = "round";
 
   for (const stroke of strokes) {
-    if (stroke.length === 0) continue;
-    ctx.beginPath();
-    const p0 = stroke[0];
-    ctx.moveTo(p0.x + 0.5, p0.y + 0.5);
-    for (let i = 1; i < stroke.length; i++) {
-      const p = stroke[i];
-      ctx.lineTo(p.x + 0.5, p.y + 0.5);
-    }
-    ctx.stroke();
-    ctx.closePath();
+    stroke.display(ctx);
   }
 }
 
@@ -101,9 +119,8 @@ canvas.addEventListener("mousedown", (ev) => {
   redoStack.length = 0;
   redoBtn.disabled = true;
 
-  currentStroke = [];
+  currentStroke = new MarkerLine(x, y);
   strokes.push(currentStroke);
-  currentStroke.push({ x, y });
   // notify observers that the drawing changed
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
@@ -111,7 +128,7 @@ canvas.addEventListener("mousedown", (ev) => {
 globalThis.addEventListener("mousemove", (ev) => {
   if (!drawing || !currentStroke) return;
   const { x, y } = getCanvasCoords(ev as MouseEvent);
-  currentStroke.push({ x, y });
+  currentStroke.drag(x, y);
   // notify observers that the drawing changed
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
