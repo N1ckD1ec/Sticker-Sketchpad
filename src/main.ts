@@ -44,6 +44,39 @@ controls.appendChild(clearBtn);
 
 document.body.appendChild(controls);
 
+// Add marker tool buttons (thin / thick)
+const tools = document.createElement("div");
+tools.className = "tools";
+
+const thinBtn = document.createElement("button");
+thinBtn.type = "button";
+thinBtn.textContent = "Thin";
+thinBtn.className = "tool selected";
+tools.appendChild(thinBtn);
+
+const thickBtn = document.createElement("button");
+thickBtn.type = "button";
+thickBtn.textContent = "Thick";
+thickBtn.className = "tool";
+tools.appendChild(thickBtn);
+
+document.body.appendChild(tools);
+
+// selected marker thickness (default thin)
+let selectedThickness = 2;
+
+thinBtn.addEventListener("click", () => {
+  selectedThickness = 2;
+  thinBtn.classList.add("selected");
+  thickBtn.classList.remove("selected");
+});
+
+thickBtn.addEventListener("click", () => {
+  selectedThickness = 6;
+  thickBtn.classList.add("selected");
+  thinBtn.classList.remove("selected");
+});
+
 // Get the 2D drawing context and narrow to a non-nullable variable
 const rawCtx = canvas.getContext("2d");
 if (!rawCtx) {
@@ -58,7 +91,10 @@ type Point = { x: number; y: number };
 // and knows how to draw itself on a CanvasRenderingContext2D.
 class MarkerLine {
   points: Point[] = [];
-  constructor(x: number, y: number) {
+  // line thickness in pixels
+  thickness: number;
+  constructor(x: number, y: number, thickness = 2) {
+    this.thickness = thickness;
     this.points.push({ x: Math.round(x), y: Math.round(y) });
   }
   // extend the stroke with a new point
@@ -69,13 +105,16 @@ class MarkerLine {
   display(ctx: CanvasRenderingContext2D) {
     if (this.points.length === 0) return;
     ctx.beginPath();
+    const oldLineWidth = ctx.lineWidth;
     const p0 = this.points[0];
     ctx.moveTo(p0.x + 0.5, p0.y + 0.5);
     for (let i = 1; i < this.points.length; i++) {
       const p = this.points[i];
       ctx.lineTo(p.x + 0.5, p.y + 0.5);
     }
+    ctx.lineWidth = this.thickness;
     ctx.stroke();
+    ctx.lineWidth = oldLineWidth;
     ctx.closePath();
   }
 }
@@ -119,7 +158,7 @@ canvas.addEventListener("mousedown", (ev) => {
   redoStack.length = 0;
   redoBtn.disabled = true;
 
-  currentStroke = new MarkerLine(x, y);
+  currentStroke = new MarkerLine(x, y, selectedThickness);
   strokes.push(currentStroke);
   // notify observers that the drawing changed
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
