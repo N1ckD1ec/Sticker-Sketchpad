@@ -59,23 +59,23 @@ tools.className = "tools";
 
 const thinBtn = document.createElement("button");
 thinBtn.type = "button";
-thinBtn.textContent = "Thin";
+thinBtn.textContent = "Fine";
 thinBtn.className = "tool selected";
 tools.appendChild(thinBtn);
 
 const thickBtn = document.createElement("button");
 thickBtn.type = "button";
-thickBtn.textContent = "Thick";
+thickBtn.textContent = "Bold";
 thickBtn.className = "tool";
 tools.appendChild(thickBtn);
 
 document.body.appendChild(tools);
 
-// selected marker thickness (default thin)
-let selectedThickness = 2;
+// selected brush thickness (default fine)
+let selectedThickness = 3;
 
 thinBtn.addEventListener("click", () => {
-  selectedThickness = 2;
+  selectedThickness = 3;
   thinBtn.classList.add("selected");
   thickBtn.classList.remove("selected");
   // switching to marker clears any sticker selection
@@ -87,7 +87,7 @@ thinBtn.addEventListener("click", () => {
 });
 
 thickBtn.addEventListener("click", () => {
-  selectedThickness = 6;
+  selectedThickness = 9;
   thickBtn.classList.add("selected");
   thinBtn.classList.remove("selected");
   // switching to marker clears sticker selection
@@ -101,7 +101,9 @@ thickBtn.addEventListener("click", () => {
 const stickersBar = document.createElement("div");
 stickersBar.className = "stickers";
 // initial set of stickers (data-driven JSON-style array)
-const stickerEmojis: string[] = ["😀", "🐱", "🌵"];
+const stickerEmojis: string[] = ["✨", "�", "�"];
+// default sticker size (pixels)
+const defaultStickerSize = 48;
 
 function createStickerButton(emoji: string) {
   const b = document.createElement("button");
@@ -210,7 +212,7 @@ class Sticker {
   y: number;
   emoji: string;
   size: number;
-  constructor(x: number, y: number, emoji = "😀", size = 32) {
+  constructor(x: number, y: number, emoji = "😀", size = defaultStickerSize) {
     this.x = Math.round(x);
     this.y = Math.round(y);
     this.emoji = emoji;
@@ -290,7 +292,7 @@ canvas.addEventListener("mousedown", (ev) => {
 
   if (selectedSticker) {
     // place a sticker command
-    currentStroke = new Sticker(x, y, selectedSticker, 32);
+    currentStroke = new Sticker(x, y, selectedSticker, defaultStickerSize);
     strokes.push(currentStroke);
     // after placing a sticker we stay in sticker mode but allow dragging to reposition
   } else {
@@ -318,7 +320,7 @@ globalThis.addEventListener("mousemove", (ev) => {
         ctx.save();
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.font = `32px serif`;
+        ctx.font = `${defaultStickerSize}px serif`;
         ctx.fillText(emoji, x + 0.5, y + 0.5);
         ctx.restore();
       },
