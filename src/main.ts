@@ -44,6 +44,15 @@ controls.appendChild(clearBtn);
 
 document.body.appendChild(controls);
 
+// Export button (high-res PNG)
+const exportBtn = document.createElement("button");
+exportBtn.type = "button";
+exportBtn.textContent = "Export";
+controls.appendChild(exportBtn);
+exportBtn.addEventListener("click", () => {
+  exportHighRes();
+});
+
 // Add marker tool buttons (thin / thick)
 const tools = document.createElement("div");
 tools.className = "tools";
@@ -372,6 +381,43 @@ clearBtn.addEventListener("click", () => {
   redoBtn.disabled = true;
   canvas.dispatchEvent(new CustomEvent("drawing-changed"));
 });
+
+function exportHighRes() {
+  const size = 1024;
+  const tmp = document.createElement("canvas");
+  tmp.width = size;
+  tmp.height = size;
+  const rctx = tmp.getContext("2d");
+  if (!rctx) return;
+
+  // optional white background
+  rctx.fillStyle = "#fff";
+  rctx.fillRect(0, 0, size, size);
+
+  // scale so 256x256 content maps to 1024x1024
+  const scale = size / canvas.width;
+  rctx.save();
+  rctx.scale(scale, scale);
+  rctx.strokeStyle = "#000";
+  rctx.lineCap = "round";
+  rctx.lineJoin = "round";
+
+  // draw each command from the display list (do not draw the preview)
+  for (const cmd of strokes) {
+    cmd.display(rctx as CanvasRenderingContext2D);
+  }
+
+  rctx.restore();
+
+  // trigger download
+  const dataUrl = tmp.toDataURL("image/png");
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = "sticker-sketchpad.png";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 // Undo behavior: move last stroke to redo stack
 undoBtn.addEventListener("click", () => {
