@@ -33,3 +33,8 @@
   background: #00449f;
   color: white;
 }
+
+.sticker-add-btn {
+  margin-left: 6px;
+  padding: 2px 8px;
+}

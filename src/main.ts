@@ -88,11 +88,13 @@ thickBtn.addEventListener("click", () => {
   );
 });
 
-// Sticker tool buttons
+// Sticker tool buttons (data-driven)
 const stickersBar = document.createElement("div");
 stickersBar.className = "stickers";
-const stickerEmojis = ["😀", "🐱", "🌵"];
-for (const emoji of stickerEmojis) {
+// initial set of stickers (data-driven JSON-style array)
+const stickerEmojis: string[] = ["😀", "🐱", "🌵"];
+
+function createStickerButton(emoji: string) {
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = emoji;
@@ -113,7 +115,42 @@ for (const emoji of stickerEmojis) {
     canvas.dispatchEvent(new CustomEvent("tool-moved"));
   });
   stickersBar.appendChild(b);
+  return b;
 }
+
+// create initial buttons from the data array
+for (const emoji of stickerEmojis) {
+  createStickerButton(emoji);
+}
+
+// Add a button to create a custom sticker via prompt
+const addStickerBtn = document.createElement("button");
+addStickerBtn.type = "button";
+addStickerBtn.textContent = "+";
+addStickerBtn.className = "sticker-add-btn";
+addStickerBtn.title = "Add custom sticker";
+addStickerBtn.addEventListener("click", () => {
+  const val = prompt("Enter sticker text or emoji:", "😀");
+  if (val === null) return; // user cancelled
+  const trimmed = val.trim();
+  if (trimmed.length === 0) return;
+  // add to the data model and create a corresponding button
+  stickerEmojis.push(trimmed);
+  createStickerButton(trimmed);
+  // select the new sticker
+  selectedSticker = trimmed;
+  document.querySelectorAll(".sticker-btn").forEach((el) =>
+    el.classList.remove("selected")
+  );
+  // mark the last button as selected
+  const last = stickersBar.lastElementChild as HTMLButtonElement | null;
+  if (last && last.classList.contains("sticker-btn")) {
+    last.classList.add("selected");
+  }
+  // notify that the tool moved/changed so a preview can appear
+  canvas.dispatchEvent(new CustomEvent("tool-moved"));
+});
+stickersBar.appendChild(addStickerBtn);
 document.body.appendChild(stickersBar);
 
 // Get the 2D drawing context and narrow to a non-nullable variable
