@@ -73,6 +73,8 @@ document.body.appendChild(tools);
 
 // selected brush thickness (default fine)
 let selectedThickness = 3;
+// next randomized style for brush
+let nextBrushColor = "#000000";
 
 thinBtn.addEventListener("click", () => {
   selectedThickness = 3;
@@ -84,6 +86,9 @@ thinBtn.addEventListener("click", () => {
   document.querySelectorAll(".sticker-btn.selected").forEach((el) =>
     el.classList.remove("selected")
   );
+  // randomize next brush color so user can click to get variations
+  nextBrushColor = randomColor();
+  canvas.dispatchEvent(new CustomEvent("tool-moved"));
 });
 
 thickBtn.addEventListener("click", () => {
@@ -95,6 +100,9 @@ thickBtn.addEventListener("click", () => {
   document.querySelectorAll(".sticker-btn.selected").forEach((el) =>
     el.classList.remove("selected")
   );
+  // randomize next brush color
+  nextBrushColor = randomColor();
+  canvas.dispatchEvent(new CustomEvent("tool-moved"));
 });
 
 // Sticker tool buttons (data-driven)
@@ -104,6 +112,23 @@ stickersBar.className = "stickers";
 const stickerEmojis: string[] = ["✨", "�", "�"];
 // default sticker size (pixels)
 const defaultStickerSize = 48;
+
+// next sticker style
+let nextStickerColor = "#000000";
+let nextStickerRotation = 0; // degrees
+
+function randomColor() {
+  // pleasant saturated HSL colors
+  const h = Math.floor(Math.random() * 360);
+  const s = 65 + Math.floor(Math.random() * 20); // 65-85%
+  const l = 40 + Math.floor(Math.random() * 20); // 40-60%
+  return `hsl(${h} ${s}% ${l}%)`;
+}
+
+function randomAngle() {
+  // small rotation between -30 and 30 degrees
+  return Math.floor(Math.random() * 61) - 30;
+}
 
 function createStickerButton(emoji: string) {
   const b = document.createElement("button");
@@ -122,6 +147,9 @@ function createStickerButton(emoji: string) {
       el.classList.remove("selected")
     );
     if (!already) b.classList.add("selected");
+    // randomize next sticker color/rotation for this tool press
+    nextStickerColor = randomColor();
+    nextStickerRotation = randomAngle();
     // notify that the tool moved/changed so a preview can appear
     canvas.dispatchEvent(new CustomEvent("tool-moved"));
   });
@@ -158,7 +186,9 @@ addStickerBtn.addEventListener("click", () => {
   if (last && last.classList.contains("sticker-btn")) {
     last.classList.add("selected");
   }
-  // notify that the tool moved/changed so a preview can appear
+  // randomize next sticker style and notify that the tool moved/changed so a preview can appear
+  nextStickerColor = randomColor();
+  nextStickerRotation = randomAngle();
   canvas.dispatchEvent(new CustomEvent("tool-moved"));
 });
 stickersBar.appendChild(addStickerBtn);
@@ -180,8 +210,10 @@ class MarkerLine {
   points: Point[] = [];
   // line thickness in pixels
   thickness: number;
-  constructor(x: number, y: number, thickness = 2) {
+  color: string;
+  constructor(x: number, y: number, thickness = 2, color = "#000") {
     this.thickness = thickness;
+    this.color = color;
     this.points.push({ x: Math.round(x), y: Math.round(y) });
   }
   // extend the stroke with a new point
@@ -193,6 +225,7 @@ class MarkerLine {
     if (this.points.length === 0) return;
     ctx.beginPath();
     const oldLineWidth = ctx.lineWidth;
+    const oldStrokeStyle = ctx.strokeStyle;
     const p0 = this.points[0];
     ctx.moveTo(p0.x + 0.5, p0.y + 0.5);
     for (let i = 1; i < this.points.length; i++) {
@@ -200,8 +233,10 @@ class MarkerLine {
       ctx.lineTo(p.x + 0.5, p.y + 0.5);
     }
     ctx.lineWidth = this.thickness;
+    ctx.strokeStyle = this.color;
     ctx.stroke();
     ctx.lineWidth = oldLineWidth;
+    ctx.strokeStyle = oldStrokeStyle;
     ctx.closePath();
   }
 }
@@ -212,11 +247,22 @@ class Sticker {
   y: number;
   emoji: string;
   size: number;
-  constructor(x: number, y: number, emoji = "😀", size = defaultStickerSize) {
+  rotation: number; // degrees
+  color: string;
+  constructor(
+    x: number,
+    y: number,
+    emoji = "😀",
+    size = defaultStickerSize,
+    rotation = 0,
+    color = "#000",
+  ) {
     this.x = Math.round(x);
     this.y = Math.round(y);
     this.emoji = emoji;
     this.size = size;
+    this.rotation = rotation;
+    this.color = color;
   }
   // reposition the sticker (dragging moves the placed sticker)
   drag(x: number, y: number) {
@@ -226,10 +272,16 @@ class Sticker {
   // draw the sticker (emoji) centered at x,y
   display(ctx: CanvasRenderingContext2D) {
     ctx.save();
+    ctx.translate(this.x + 0.5, this.y + 0.5);
+    ctx.rotate((this.rotation * Math.PI) / 180);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${this.size}px serif`;
-    ctx.fillText(this.emoji, this.x + 0.5, this.y + 0.5);
+    // try to set fillStyle (may not recolor colored emoji glyphs)
+    const oldFill = ctx.fillStyle;
+    ctx.fillStyle = this.color;
+    ctx.fillText(this.emoji, 0, 0);
+    ctx.fillStyle = oldFill;
     ctx.restore();
   }
 }
@@ -292,11 +344,18 @@ canvas.addEventListener("mousedown", (ev) => {
 
   if (selectedSticker) {
     // place a sticker command
-    currentStroke = new Sticker(x, y, selectedSticker, defaultStickerSize);
+    currentStroke = new Sticker(
+      x,
+      y,
+      selectedSticker,
+      defaultStickerSize,
+      nextStickerRotation,
+      nextStickerColor,
+    );
     strokes.push(currentStroke);
     // after placing a sticker we stay in sticker mode but allow dragging to reposition
   } else {
-    currentStroke = new MarkerLine(x, y, selectedThickness);
+    currentStroke = new MarkerLine(x, y, selectedThickness, nextBrushColor);
     strokes.push(currentStroke);
   }
   // notify observers that the drawing changed
@@ -318,10 +377,15 @@ globalThis.addEventListener("mousemove", (ev) => {
     toolPreview = {
       draw(ctx) {
         ctx.save();
+        ctx.translate(x + 0.5, y + 0.5);
+        ctx.rotate((nextStickerRotation * Math.PI) / 180);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.font = `${defaultStickerSize}px serif`;
-        ctx.fillText(emoji, x + 0.5, y + 0.5);
+        const oldFill = ctx.fillStyle;
+        ctx.fillStyle = nextStickerColor;
+        ctx.fillText(emoji, 0, 0);
+        ctx.fillStyle = oldFill;
         ctx.restore();
       },
     };
@@ -338,7 +402,10 @@ globalThis.addEventListener("mousemove", (ev) => {
           Math.PI * 2,
         );
         ctx.lineWidth = 1;
+        const oldStroke = ctx.strokeStyle;
+        ctx.strokeStyle = nextBrushColor;
         ctx.stroke();
+        ctx.strokeStyle = oldStroke;
         ctx.closePath();
       },
     };
